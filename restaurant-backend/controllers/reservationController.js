@@ -118,6 +118,8 @@ exports.updateReservation = async (req, res) => {
   const { reservation_id, date, time, people_count } = req.body;
   const user_id = req.user.user_id;
 
+  console.log('Update reservation payload:', { reservation_id, date, time, people_count, user_id });
+
   // Validate inputs
   if (!reservation_id || !date || !time || !people_count) {
     return res.status(400).json({ error: "Missing required fields" });

@@ -1,4 +1,3 @@
-// controllers/authcontroller.js
 const pool = require('../models/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -12,6 +11,7 @@ exports.register = async (req, res) => {
     conn.release();
     res.status(201).json({ message: 'User registered successfully' });
   } catch (err) {
+    console.error('Registration error:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -32,6 +32,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign({ user_id: user.user_id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
     res.json({ token });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ error: err.message });
   }
 };

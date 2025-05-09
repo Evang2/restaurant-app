@@ -9,7 +9,7 @@ import HomeScreen from './screens/HomeScreen';
 import ReservationScreen from './screens/ReservationScreen';
 import EditReservationScreen from "./screens/EditReservationScreen";
 import UserReservationScreen from "./screens/UserReservationScreen";
-// import UserReservationScreen from './restaurant-app-js/screens/UserReservationSreen.js';  // Import the new screen
+
 
 const Stack = createNativeStackNavigator();
 

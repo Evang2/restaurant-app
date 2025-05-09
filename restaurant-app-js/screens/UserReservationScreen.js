@@ -22,7 +22,7 @@ export default function UserReservationsScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // Enhanced fetch reservations function
+  // Fetch reservations
   const fetchReservations = async () => {
     try {
       setLoading(true);
@@ -38,7 +38,7 @@ export default function UserReservationsScreen({ navigation, route }) {
       
       console.log("Fetching reservations with token:", token.substring(0, 10) + "...");
       
-      const response = await api.get("/user/reservations", {
+      const response = await api.get("/reservations/user/reservations", {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000,
       });
@@ -46,20 +46,16 @@ export default function UserReservationsScreen({ navigation, route }) {
       console.log("API Response Status:", response.status);
       console.log("Raw Reservations Data:", JSON.stringify(response.data, null, 2));
   
-      // Handle both array and single object responses
       const data = Array.isArray(response.data)
         ? response.data
         : response.data && typeof response.data === "object"
         ? [response.data]
         : [];
       
-      // Validate and normalize the data structure
       const validData = data.map(item => {
-        // Normalize date from ISO (e.g., "2025-05-08T21:00:00.000Z") to YYYY-MM-DD
         const normalizedDate = item.date
           ? new Date(item.date).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0];
-        // Normalize time to HH:MM:SS if it's HH:MM
         const normalizedTime = item.time && item.time.length === 5 ? `${item.time}:00` : item.time;
         return {
           ...item,
@@ -73,7 +69,6 @@ export default function UserReservationsScreen({ navigation, route }) {
       });
       
       console.log("Validated reservation data:", validData.length, "reservations");
-      console.log("Validated data details:", JSON.stringify(validData, null, 2));
       setReservations(validData);
   
     } catch (err) {
@@ -98,12 +93,10 @@ export default function UserReservationsScreen({ navigation, route }) {
     }
   };
 
-  // Initial load
   useEffect(() => {
     fetchReservations();
   }, []);
 
-  // Refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       console.log("Screen focused, fetching reservations");
@@ -111,37 +104,29 @@ export default function UserReservationsScreen({ navigation, route }) {
     }, [])
   );
   
-  // Check for updates from route params
   useEffect(() => {
     console.log("Route params received:", route.params);
     if (route.params?.reservationAdded || route.params?.reservationUpdated) {
       console.log("Reservation change detected, refreshing list");
       fetchReservations();
-      // Clear the params to prevent repeated refreshes
       navigation.setParams({ reservationAdded: undefined, reservationUpdated: undefined });
     }
   }, [route.params]);
 
-  // Pull to refresh handler
   const onRefresh = () => {
     setRefreshing(true);
     fetchReservations();
   };
 
-  // Enhanced date formatting
   const formatDate = (dateString) => {
     try {
-      console.log("Formatting date:", dateString);
       if (!dateString) return "Invalid date";
-      
       const options = { weekday: "short", month: "short", day: "numeric" };
       const date = new Date(dateString);
-      
       if (isNaN(date.getTime())) {
         console.error("Invalid date format:", dateString);
         return dateString;
       }
-      
       return date.toLocaleDateString(undefined, options);
     } catch (error) {
       console.error("Error formatting date:", dateString, error);
@@ -149,7 +134,6 @@ export default function UserReservationsScreen({ navigation, route }) {
     }
   };
 
-  // Handle cancellation of reservation
   const handleDeleteReservation = async (reservation_id, restaurantName) => {
     Alert.alert(
       "Cancel Reservation",
@@ -191,23 +175,19 @@ export default function UserReservationsScreen({ navigation, route }) {
     );
   };
 
-  // Handle booking again
   const handleBookAgain = (restaurant) => {
     console.log("Booking again at restaurant:", restaurant);
-    
-    if (!restaurant.restaurant_id) {
-      console.error("Missing restaurant_id for booking again:", restaurant);
+    if (!restaurant.restaurant_id || !restaurant.restaurant_name) {
+      console.error("Missing restaurant details for booking again:", restaurant);
       Alert.alert("Error", "Cannot book again: missing restaurant information");
       return;
     }
-    
-    navigation.navigate("RestaurantDetails", { 
-      restaurant_id: restaurant.restaurant_id,
-      name: restaurant.restaurant_name
+    navigation.navigate("Reservation", {
+      restaurantId: restaurant.restaurant_id,
+      restaurantName: restaurant.restaurant_name,
     });
   };
 
-  // Enhanced filtering of reservations
   const now = new Date();
   console.log("Current date/time for comparison (UTC):", now.toUTCString());
   
@@ -218,20 +198,14 @@ export default function UserReservationsScreen({ navigation, route }) {
           console.log("Missing date or time in reservation:", res);
           return false;
         }
-        
-        // Normalize time to HH:MM:SS
         const normalizedTime = res.time.length === 5 ? `${res.time}:00` : res.time;
-        
-        // Parse date and time in UTC
         const [year, month, day] = res.date.split('-').map(Number);
         const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
         const resDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds || 0));
-        
         console.log(
           `Reservation: ${res.restaurant_name}, Date: ${res.date}, Time: ${normalizedTime}, ` +
           `Parsed (UTC): ${resDateTime.toUTCString()}, Is upcoming: ${resDateTime >= now}`
         );
-        
         return !isNaN(resDateTime) && resDateTime >= now;
       } catch (error) {
         console.error("Error filtering upcoming reservation:", error, res);
@@ -248,12 +222,10 @@ export default function UserReservationsScreen({ navigation, route }) {
     .filter(res => {
       try {
         if (!res.date || !res.time) return false;
-        
         const normalizedTime = res.time.length === 5 ? `${res.time}:00` : res.time;
         const [year, month, day] = res.date.split('-').map(Number);
         const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
         const resDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds || 0));
-        
         return !isNaN(resDateTime) && resDateTime < now;
       } catch (error) {
         console.error("Error filtering past reservation:", error, res);
@@ -268,7 +240,6 @@ export default function UserReservationsScreen({ navigation, route }) {
 
   console.log(`Found ${upcoming.length} upcoming and ${past.length} past reservations`);
 
-  // Render an upcoming reservation
   const renderUpcomingItem = ({ item }) => {
     console.log("Rendering upcoming reservation:", item);
     return (
@@ -320,7 +291,6 @@ export default function UserReservationsScreen({ navigation, route }) {
     );
   };
 
-  // Render a past reservation
   const renderPastItem = ({ item }) => {
     console.log("Rendering past reservation:", item);
     return (
@@ -362,7 +332,6 @@ export default function UserReservationsScreen({ navigation, route }) {
     );
   };
 
-  // Empty state components
   const EmptyUpcoming = () => (
     <View style={styles.emptyState}>
       <Ionicons name="calendar-outline" size={60} color="#ccc" />
@@ -372,7 +341,7 @@ export default function UserReservationsScreen({ navigation, route }) {
       </Text>
       <TouchableOpacity 
         style={styles.findRestaurantButton}
-        onPress={() => kitųnavigation.navigate("Home")}
+        onPress={() => navigation.navigate("Home")}
       >
         <Text style={styles.findRestaurantButtonText}>Find Restaurants</Text>
       </TouchableOpacity>
@@ -389,7 +358,6 @@ export default function UserReservationsScreen({ navigation, route }) {
     </View>
   );
 
-  // Error state component
   const ErrorDisplay = () => (
     <View style={styles.emptyState}>
       <Ionicons name="alert-circle-outline" size={60} color="#ff6b6b" />
@@ -404,7 +372,6 @@ export default function UserReservationsScreen({ navigation, route }) {
     </View>
   );
 
-  // Renders for loading state
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -426,7 +393,7 @@ export default function UserReservationsScreen({ navigation, route }) {
         <ErrorDisplay />
       ) : (
         <FlatList
-          data={[]} // Dummy data for the main FlatList
+          data={[]}
           renderItem={null}
           ListHeaderComponent={
             <>
@@ -607,6 +574,7 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: "row",
+    justifyContent: "row",
     justifyContent: "space-between",
   },
   editButton: {

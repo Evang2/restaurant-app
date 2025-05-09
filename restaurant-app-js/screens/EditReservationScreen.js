@@ -18,8 +18,30 @@ export default function EditReservationScreen({ route, navigation }) {
   const [peopleCount, setPeopleCount] = useState(reservation.people_count.toString());
 
   const handleUpdate = async () => {
+    // Validate inputs
     if (!date || !time || !peopleCount) {
       Alert.alert("Missing fields", "Please fill in all fields.");
+      return;
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      Alert.alert("Error", "Invalid date format. Use YYYY-MM-DD");
+      return;
+    }
+
+    // Validate time format (HH:MM or HH:MM:SS)
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/;
+    if (!timeRegex.test(time)) {
+      Alert.alert("Error", "Invalid time format. Use HH:MM or HH:MM:SS");
+      return;
+    }
+
+    // Validate people_count
+    const peopleCountNum = parseInt(peopleCount, 10);
+    if (!Number.isInteger(peopleCountNum) || peopleCountNum < 1) {
+      Alert.alert("Error", "Number of people must be a positive integer");
       return;
     }
 
@@ -31,17 +53,18 @@ export default function EditReservationScreen({ route, navigation }) {
           reservation_id: reservation.reservation_id,
           date,
           time,
-          people_count: parseInt(peopleCount, 10),
+          people_count: peopleCountNum,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: 5000,
         }
       );
 
       Alert.alert("Success", response.data.message, [
         {
           text: "OK",
-          onPress: () => navigation.goBack(),
+          onPress: () => navigation.navigate("UserReservations", { reservationUpdated: true }),
         },
       ]);
     } catch (err) {
@@ -52,7 +75,7 @@ export default function EditReservationScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Edit Reservation</Text>
+      <Text style={styles.title}>Edit Reservation at {reservation.restaurant_name}</Text>
 
       <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
       <TextInput
@@ -76,6 +99,7 @@ export default function EditReservationScreen({ route, navigation }) {
         value={peopleCount}
         onChangeText={setPeopleCount}
         keyboardType="numeric"
+        placeholder="e.g., 4"
       />
 
       <Button title="Update Reservation" onPress={handleUpdate} />
@@ -84,7 +108,7 @@ export default function EditReservationScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
   title: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
   label: { fontSize: 16, marginTop: 12 },
   input: {
@@ -93,5 +117,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginTop: 4,
+    fontSize: 16,
   },
 });
