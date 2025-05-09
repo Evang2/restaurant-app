@@ -20,39 +20,77 @@ export default function UserReservationsScreen({ navigation, route }) {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Fetch reservations function
+  // Enhanced fetch reservations function
   const fetchReservations = async () => {
     try {
       setLoading(true);
+      setError(null);
       const token = await AsyncStorage.getItem("token");
       
       if (!token) {
         console.log("No authentication token found");
         setReservations([]);
+        setError("No authentication token found. Please log in again.");
         return;
       }
       
+      console.log("Fetching reservations with token:", token.substring(0, 10) + "...");
+      
       const response = await api.get("/user/reservations", {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
       });
       
-      console.log("Reservations API response:", response.data);
+      console.log("API Response Status:", response.status);
+      console.log("Raw Reservations Data:", JSON.stringify(response.data, null, 2));
   
-      // Ensure the response is always an array
-      const data = Array.isArray(response.data) ? response.data : [];
-      setReservations(data);
+      // Handle both array and single object responses
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data && typeof response.data === "object"
+        ? [response.data]
+        : [];
+      
+      // Validate and normalize the data structure
+      const validData = data.map(item => {
+        // Normalize date from ISO (e.g., "2025-05-08T21:00:00.000Z") to YYYY-MM-DD
+        const normalizedDate = item.date
+          ? new Date(item.date).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+        // Normalize time to HH:MM:SS if it's HH:MM
+        const normalizedTime = item.time && item.time.length === 5 ? `${item.time}:00` : item.time;
+        return {
+          ...item,
+          restaurant_name: item.restaurant_name || "Unknown Restaurant",
+          restaurant_id: item.restaurant_id || 0,
+          reservation_id: item.reservation_id?.toString() || Math.random().toString(),
+          date: normalizedDate,
+          time: normalizedTime || "12:00:00",
+          people_count: item.people_count || 1,
+        };
+      });
+      
+      console.log("Validated reservation data:", validData.length, "reservations");
+      console.log("Validated data details:", JSON.stringify(validData, null, 2));
+      setReservations(validData);
   
     } catch (err) {
       console.error("Error fetching reservations:", err);
+      
       if (err.response) {
         console.log("Error response data:", err.response.data);
         console.log("Error response status:", err.response.status);
+        setError(`Server error (${err.response.status}): ${JSON.stringify(err.response.data)}`);
+      } else if (err.request) {
+        console.log("No response received:", err.request);
+        setError("No response from server. Please check your connection.");
+      } else {
+        console.log("Error message:", err.message);
+        setError(`Error: ${err.message}`);
       }
-      Alert.alert(
-        "Error",
-        "Could not load your reservations. Please try again later."
-      );
+      
       setReservations([]);
     } finally {
       setLoading(false);
@@ -75,6 +113,7 @@ export default function UserReservationsScreen({ navigation, route }) {
   
   // Check for updates from route params
   useEffect(() => {
+    console.log("Route params received:", route.params);
     if (route.params?.reservationAdded || route.params?.reservationUpdated) {
       console.log("Reservation change detected, refreshing list");
       fetchReservations();
@@ -89,14 +128,24 @@ export default function UserReservationsScreen({ navigation, route }) {
     fetchReservations();
   };
 
-  // Format date for better display
+  // Enhanced date formatting
   const formatDate = (dateString) => {
     try {
+      console.log("Formatting date:", dateString);
+      if (!dateString) return "Invalid date";
+      
       const options = { weekday: "short", month: "short", day: "numeric" };
-      return new Date(dateString).toLocaleDateString(undefined, options);
+      const date = new Date(dateString);
+      
+      if (isNaN(date.getTime())) {
+        console.error("Invalid date format:", dateString);
+        return dateString;
+      }
+      
+      return date.toLocaleDateString(undefined, options);
     } catch (error) {
       console.error("Error formatting date:", dateString, error);
-      return dateString; // return original string if parsing fails
+      return dateString;
     }
   };
 
@@ -116,6 +165,7 @@ export default function UserReservationsScreen({ navigation, route }) {
               const token = await AsyncStorage.getItem("token");
               await api.delete(`/reservations/${reservation_id}`, {
                 headers: { Authorization: `Bearer ${token}` },
+                timeout: 5000,
               });
               
               setReservations((prev) =>
@@ -143,23 +193,45 @@ export default function UserReservationsScreen({ navigation, route }) {
 
   // Handle booking again
   const handleBookAgain = (restaurant) => {
+    console.log("Booking again at restaurant:", restaurant);
+    
+    if (!restaurant.restaurant_id) {
+      console.error("Missing restaurant_id for booking again:", restaurant);
+      Alert.alert("Error", "Cannot book again: missing restaurant information");
+      return;
+    }
+    
     navigation.navigate("RestaurantDetails", { 
       restaurant_id: restaurant.restaurant_id,
       name: restaurant.restaurant_name
     });
   };
 
-  // Sort reservations into upcoming and past
+  // Enhanced filtering of reservations
   const now = new Date();
+  console.log("Current date/time for comparison (UTC):", now.toUTCString());
   
   const upcoming = reservations
     .filter(res => {
       try {
-        // Make sure we have valid date and time
-        if (!res.date || !res.time) return false;
+        if (!res.date || !res.time) {
+          console.log("Missing date or time in reservation:", res);
+          return false;
+        }
         
-        // Create a Date object for the reservation date and time
-        const resDateTime = new Date(`${res.date}T${res.time}`);
+        // Normalize time to HH:MM:SS
+        const normalizedTime = res.time.length === 5 ? `${res.time}:00` : res.time;
+        
+        // Parse date and time in UTC
+        const [year, month, day] = res.date.split('-').map(Number);
+        const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
+        const resDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds || 0));
+        
+        console.log(
+          `Reservation: ${res.restaurant_name}, Date: ${res.date}, Time: ${normalizedTime}, ` +
+          `Parsed (UTC): ${resDateTime.toUTCString()}, Is upcoming: ${resDateTime >= now}`
+        );
+        
         return !isNaN(resDateTime) && resDateTime >= now;
       } catch (error) {
         console.error("Error filtering upcoming reservation:", error, res);
@@ -167,19 +239,21 @@ export default function UserReservationsScreen({ navigation, route }) {
       }
     })
     .sort((a, b) => {
-      const dateA = new Date(`${a.date}T${a.time}`);
-      const dateB = new Date(`${b.date}T${b.time}`);
+      const dateA = new Date(`${a.date}T${a.time.length === 5 ? `${a.time}:00` : a.time}`);
+      const dateB = new Date(`${b.date}T${b.time.length === 5 ? `${b.time}:00` : b.time}`);
       return dateA - dateB;
     });
   
   const past = reservations
     .filter(res => {
       try {
-        // Make sure we have valid date and time
         if (!res.date || !res.time) return false;
         
-        // Create a Date object for the reservation date and time
-        const resDateTime = new Date(`${res.date}T${res.time}`);
+        const normalizedTime = res.time.length === 5 ? `${res.time}:00` : res.time;
+        const [year, month, day] = res.date.split('-').map(Number);
+        const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
+        const resDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds || 0));
+        
         return !isNaN(resDateTime) && resDateTime < now;
       } catch (error) {
         console.error("Error filtering past reservation:", error, res);
@@ -187,100 +261,106 @@ export default function UserReservationsScreen({ navigation, route }) {
       }
     })
     .sort((a, b) => {
-      const dateA = new Date(`${a.date}T${a.time}`);
-      const dateB = new Date(`${b.date}T${b.time}`);
-      return dateB - dateA; // Most recent first
+      const dateA = new Date(`${a.date}T${a.time.length === 5 ? `${a.time}:00` : a.time}`);
+      const dateB = new Date(`${b.date}T${b.time.length === 5 ? `${b.time}:00` : b.time}`);
+      return dateB - dateA;
     });
 
   console.log(`Found ${upcoming.length} upcoming and ${past.length} past reservations`);
 
   // Render an upcoming reservation
-  const renderUpcomingItem = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.restaurant_name}</Text>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>Confirmed</Text>
-        </View>
-      </View>
-      
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <Ionicons name="calendar" size={18} color="#4A90E2" style={styles.icon} />
-          <Text style={styles.infoText}>{formatDate(item.date)}</Text>
+  const renderUpcomingItem = ({ item }) => {
+    console.log("Rendering upcoming reservation:", item);
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.restaurant_name}</Text>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>Confirmed</Text>
+          </View>
         </View>
         
-        <View style={styles.infoRow}>
-          <Ionicons name="time" size={18} color="#4A90E2" style={styles.icon} />
-          <Text style={styles.infoText}>{item.time}</Text>
+        <View style={styles.cardContent}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar" size={18} color="#4A90E2" style={styles.icon} />
+            <Text style={styles.infoText}>{formatDate(item.date)}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="time" size={18} color="#4A90E2" style={styles.icon} />
+            <Text style={styles.infoText}>{item.time}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="people" size={18} color="#4A90E2" style={styles.icon} />
+            <Text style={styles.infoText}>
+              {item.people_count} {parseInt(item.people_count) === 1 ? "person" : "people"}
+            </Text>
+          </View>
         </View>
         
-        <View style={styles.infoRow}>
-          <Ionicons name="people" size={18} color="#4A90E2" style={styles.icon} />
-          <Text style={styles.infoText}>
-            {item.people_count} {parseInt(item.people_count) === 1 ? "person" : "people"}
-          </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => navigation.navigate("EditReservation", { reservation: item })}
+          >
+            <Ionicons name="create-outline" size={16} color="#fff" />
+            <Text style={styles.buttonText}>Modify</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => handleDeleteReservation(item.reservation_id, item.restaurant_name)}
+          >
+            <Ionicons name="close-circle-outline" size={16} color="#fff" />
+            <Text style={styles.buttonText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
       </View>
-      
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => navigation.navigate("EditReservation", { reservation: item })}
-        >
-          <Ionicons name="create-outline" size={16} color="#fff" />
-          <Text style={styles.buttonText}>Modify</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => handleDeleteReservation(item.reservation_id, item.restaurant_name)}
-        >
-          <Ionicons name="close-circle-outline" size={16} color="#fff" />
-          <Text style={styles.buttonText}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   // Render a past reservation
-  const renderPastItem = ({ item }) => (
-    <View style={[styles.card, styles.pastCard]}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.restaurant_name}</Text>
-        <View style={styles.pastStatusBadge}>
-          <Text style={styles.pastStatusText}>Completed</Text>
-        </View>
-      </View>
-      
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <Ionicons name="calendar" size={18} color="#888" style={styles.icon} />
-          <Text style={styles.pastInfoText}>{formatDate(item.date)}</Text>
+  const renderPastItem = ({ item }) => {
+    console.log("Rendering past reservation:", item);
+    return (
+      <View style={[styles.card, styles.pastCard]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.restaurant_name}</Text>
+          <View style={styles.pastStatusBadge}>
+            <Text style={styles.pastStatusText}>Completed</Text>
+          </View>
         </View>
         
-        <View style={styles.infoRow}>
-          <Ionicons name="time" size={18} color="#888" style={styles.icon} />
-          <Text style={styles.pastInfoText}>{item.time}</Text>
+        <View style={styles.cardContent}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar" size={18} color="#888" style={styles.icon} />
+            <Text style={styles.pastInfoText}>{formatDate(item.date)}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="time" size={18} color="#888" style={styles.icon} />
+            <Text style={styles.pastInfoText}>{item.time}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="people" size={18} color="#888" style={styles.icon} />
+            <Text style={styles.pastInfoText}>
+              {item.people_count} {parseInt(item.people_count) === 1 ? "person" : "people"}
+            </Text>
+          </View>
         </View>
         
-        <View style={styles.infoRow}>
-          <Ionicons name="people" size={18} color="#888" style={styles.icon} />
-          <Text style={styles.pastInfoText}>
-            {item.people_count} {parseInt(item.people_count) === 1 ? "person" : "people"}
-          </Text>
-        </View>
+        <TouchableOpacity 
+          style={styles.bookAgainButton}
+          onPress={() => handleBookAgain(item)}
+        >
+          <Ionicons name="repeat" size={16} color="#fff" />
+          <Text style={styles.buttonText}>Book Again</Text>
+        </TouchableOpacity>
       </View>
-      
-      <TouchableOpacity 
-        style={styles.bookAgainButton}
-        onPress={() => handleBookAgain(item)}
-      >
-        <Ionicons name="repeat" size={16} color="#fff" />
-        <Text style={styles.buttonText}>Book Again</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   // Empty state components
   const EmptyUpcoming = () => (
@@ -292,7 +372,7 @@ export default function UserReservationsScreen({ navigation, route }) {
       </Text>
       <TouchableOpacity 
         style={styles.findRestaurantButton}
-        onPress={() => navigation.navigate("Home")}
+        onPress={() => kitųnavigation.navigate("Home")}
       >
         <Text style={styles.findRestaurantButtonText}>Find Restaurants</Text>
       </TouchableOpacity>
@@ -306,6 +386,21 @@ export default function UserReservationsScreen({ navigation, route }) {
       <Text style={styles.emptyStateSubtext}>
         Your reservation history will appear here
       </Text>
+    </View>
+  );
+
+  // Error state component
+  const ErrorDisplay = () => (
+    <View style={styles.emptyState}>
+      <Ionicons name="alert-circle-outline" size={60} color="#ff6b6b" />
+      <Text style={styles.emptyStateText}>Something went wrong</Text>
+      <Text style={styles.emptyStateSubtext}>{error}</Text>
+      <TouchableOpacity 
+        style={styles.findRestaurantButton}
+        onPress={onRefresh}
+      >
+        <Text style={styles.findRestaurantButtonText}>Try Again</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -327,56 +422,62 @@ export default function UserReservationsScreen({ navigation, route }) {
         <Text style={styles.headerTitle}>My Reservations</Text>
       </View>
       
-      <FlatList
-        data={[]} // Dummy data for the main FlatList
-        renderItem={null}
-        ListHeaderComponent={
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Upcoming</Text>
-              {upcoming.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countText}>{upcoming.length}</Text>
-                </View>
+      {error ? (
+        <ErrorDisplay />
+      ) : (
+        <FlatList
+          data={[]} // Dummy data for the main FlatList
+          renderItem={null}
+          ListHeaderComponent={
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Upcoming</Text>
+                {upcoming.length > 0 && (
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countText}>{upcoming.length}</Text>
+                  </View>
+                )}
+              </View>
+              
+              {upcoming.length > 0 ? (
+                <FlatList
+                  data={upcoming}
+                  keyExtractor={(item) => item.reservation_id}
+                  renderItem={renderUpcomingItem}
+                  scrollEnabled={false}
+                  key={upcoming.length}
+                />
+              ) : (
+                <EmptyUpcoming />
               )}
-            </View>
-            
-            {upcoming.length > 0 ? (
-              <FlatList
-                data={upcoming}
-                keyExtractor={(item) => item.reservation_id?.toString() || Math.random().toString()}
-                renderItem={renderUpcomingItem}
-                scrollEnabled={false}
-              />
-            ) : (
-              <EmptyUpcoming />
-            )}
-            
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>History</Text>
-              {past.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countText}>{past.length}</Text>
-                </View>
+              
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>History</Text>
+                {past.length > 0 && (
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countText}>{past.length}</Text>
+                  </View>
+                )}
+              </View>
+              
+              {past.length > 0 ? (
+                <FlatList
+                  data={past}
+                  keyExtractor={(item) => item.reservation_id}
+                  renderItem={renderPastItem}
+                  scrollEnabled={false}
+                  key={past.length}
+                />
+              ) : (
+                <EmptyPast />
               )}
-            </View>
-            
-            {past.length > 0 ? (
-              <FlatList
-                data={past}
-                keyExtractor={(item) => item.reservation_id?.toString() || Math.random().toString()}
-                renderItem={renderPastItem}
-                scrollEnabled={false}
-              />
-            ) : (
-              <EmptyPast />
-            )}
-          </>
-        }
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      />
+            </>
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
