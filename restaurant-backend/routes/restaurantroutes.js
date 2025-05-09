@@ -15,6 +15,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Endpoint to search restaurants by name or location
+router.get('/search', async (req, res) => {
+  const { query } = req.query;
+  if (!query) {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+    const searchTerm = `%${query}%`;
+    const rows = await conn.query(
+      'SELECT * FROM restaurants WHERE name LIKE ? OR location LIKE ?',
+      [searchTerm, searchTerm]
+    );
+    conn.release();
+    res.json(rows);
+  } catch (err) {
+    console.error('Error searching restaurants:', err);
+    res.status(500).json({ error: 'Failed to search restaurants' });
+  }
+});
+
 // Endpoint to get a single restaurant by ID
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

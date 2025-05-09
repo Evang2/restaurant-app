@@ -1,8 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
-const restaurantRoutes = require('./routes/restaurantRoutes');
-const reservationRoutes = require('./routes/reservationRoutes');
+const restaurantRoutes = require("./routes/restaurantRoutes");
+const reservationRoutes = require("./routes/reservationRoutes");
 
 require("dotenv").config();
 
@@ -29,8 +29,8 @@ app.use((req, res, next) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error("Server error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 const PORT = process.env.PORT || 3000;

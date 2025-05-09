@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
   TouchableOpacity,
-  SafeAreaView
+  SafeAreaView,
+  TextInput,
 } from 'react-native';
 import api from '../api/api';
 
 export default function HomeScreen({ navigation }) {
   const [restaurants, setRestaurants] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -21,12 +23,44 @@ export default function HomeScreen({ navigation }) {
         console.error('Fetch error:', err);
       }
     };
-    
+
     fetchRestaurants();
   }, []);
 
+  // Handle search with backend
+  useEffect(() => {
+    const searchRestaurants = async () => {
+      if (searchQuery.trim() === '') {
+        // Fetch all restaurants if query is empty
+        try {
+          const response = await api.get('/restaurants');
+          setRestaurants(response.data);
+        } catch (err) {
+          console.error('Fetch error:', err);
+        }
+      } else {
+        // Search using backend endpoint
+        try {
+          const response = await api.get('/restaurants/search', {
+            params: { query: searchQuery },
+          });
+          setRestaurants(response.data);
+        } catch (err) {
+          console.error('Search error:', err);
+        }
+      }
+    };
+
+    // Debounce search to avoid too many requests
+    const debounce = setTimeout(() => {
+      searchRestaurants();
+    }, 300);
+
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
   const handleRestaurantPress = (restaurant) => {
-    navigation.navigate("Reservation", {
+    navigation.navigate('Reservation', {
       restaurantId: restaurant.restaurant_id,
       restaurantName: restaurant.name,
     });
@@ -36,20 +70,31 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Restaurants</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.reservationsButton}
-          onPress={() => navigation.navigate("UserReservations")}
+          onPress={() => navigation.navigate('UserReservations')}
         >
           <Text style={styles.reservationsButtonText}>My Reservations</Text>
         </TouchableOpacity>
       </View>
-      
+
+      {/* Search Input */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or location..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+        />
+      </View>
+
       <FlatList
         data={restaurants}
         keyExtractor={(item) => item.restaurant_id.toString()}
         contentContainerStyle={styles.listContainer}
         renderItem={({ item }) => (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => handleRestaurantPress(item)}
             activeOpacity={0.7}
@@ -67,8 +112,8 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: '#F8F9FA',
   },
   header: {
@@ -80,8 +125,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  title: { 
-    fontSize: 24, 
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#212121',
   },
@@ -95,6 +140,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '500',
     fontSize: 14,
+  },
+  searchContainer: {
+    padding: 16,
+    backgroundColor: '#FFF',
+  },
+  searchInput: {
+    backgroundColor: '#F1F3F4',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#212121',
   },
   listContainer: {
     padding: 16,
@@ -112,7 +168,7 @@ const styles = StyleSheet.create({
   cardContent: {
     padding: 16,
   },
-  name: { 
+  name: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 6,
@@ -127,5 +183,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#757575',
     lineHeight: 20,
-  }
+  },
 });
