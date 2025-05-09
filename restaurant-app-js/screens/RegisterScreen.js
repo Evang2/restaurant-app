@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, TextInput, Button, Alert, StyleSheet } from "react-native";
-import api from "../api/api";
+import { register } from "../api/api";  // Use the register function from api.js
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState("");
@@ -9,11 +9,7 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     try {
-      const res = await api.post("/auth/register", {
-        name,
-        email,
-        password,
-      });
+      await register({ name, email, password });  // Use the register function
       Alert.alert("Success", "User registered!");
       navigation.navigate("Login");
     } catch (err) {
