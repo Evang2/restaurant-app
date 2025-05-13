@@ -31,8 +31,31 @@
 | Frontend       |  React Native / css / expo           |
 | Backend        |  Node.js / Express                   |
 | Database       |  MariaDB                             |
-| Authentication |  JWT /Bearer <token>                 |
+| Authentication |  JWT                                 |
 
+### Frontend:
+- **React Native**: Framework for building the mobile app.
+- **Expo**: Framework for building and running React Native apps.
+- **React Navigation**: Used for navigating between different screens.
+- **Axios**: For making HTTP requests to the backend API.
+- **AsyncStorage**: To store JWT tokens securely on the device.
+
+### Backend:
+- **Node.js**: JavaScript runtime for the server-side logic.
+- **Express.js**: Web framework for Node.js.
+- **MariaDB**: Relational database for storing user, restaurant, and reservation data.
+- **JWT**: Token-based authentication for securing API endpoints.
+- **bcrypt**: Library for password hashing.
+- **cors**: Middleware for enabling CORS (Cross-Origin Resource Sharing).
+- **dotenv**: For managing environment variables.
+  
+## Setup
+
+### Prerequisites
+
+- **Node.js** (For backend)
+- **MariaDB** (For database)
+- **Expo** (For running React Native frontend)
 
 ---
 
